@@ -19,8 +19,8 @@ CONFIG = {
     "UPTO_LINK": os.getenv("UPTO_LINK", "https://uptolink.vip/Ce8sj"),
     "KEYWORDS_KEEP": ["linkhuongdan.online"],
     "KEYWORDS_IGNORE": ["totreview.com", "totreview"],
-    "MAX_CHECKS": 15,
-    "WAIT_SECONDS": 2,
+    "MAX_CHECKS": 10,
+    "WAIT_SECONDS": 1,
     "CHECK_INTERVAL_MINUTES": 5,
     "LOG_FILE": "found_codes.json",
     "USERS_FILE": "users.json"
