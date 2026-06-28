@@ -1,18 +1,25 @@
-require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 const cron = require('node-cron');
 
 // =================== CẤU HÌNH ===================
+// 🔧 SỬA CÁC GIÁ TRỊ BÊN DƯỚI THEO CỦA BẠN
 const CONFIG = {
-    BOT_TOKEN: process.env.BOT_TOKEN,
-    CHAT_ID: process.env.CHAT_ID,
-    UPTO_LINK: process.env.UPTO_LINK,
-    KEYWORDS_KEEP: process.env.KEYWORDS_KEEP ? process.env.KEYWORDS_KEEP.split(',') : ['linkhuongdan.online'],
-    KEYWORDS_IGNORE: process.env.KEYWORDS_IGNORE ? process.env.KEYWORDS_IGNORE.split(',') : ['totreview.com', 'totreview'],
-    MAX_CHECKS: parseInt(process.env.MAX_CHECKS) || 15,
-    WAIT_SECONDS: parseInt(process.env.WAIT_SECONDS) || 2,
-    CHECK_INTERVAL_MINUTES: parseInt(process.env.CHECK_INTERVAL_MINUTES) || 30
+    // Telegram Bot
+    BOT_TOKEN: '8801698234:AAGUersDEYljjVSxgMzSJeNjbEv0RI2fNWc',  // Token bot Telegram
+    CHAT_ID: '8801698234',                                  // Chat ID Telegram
+
+    // Uptolink
+    UPTO_LINK: 'https://uptolink.vip/Ce8sj', // Link Uptolink cần kiểm tra
+
+    // Từ khóa
+    KEYWORDS_KEEP: ['linkhuongdan.online'],   // Domain chứa mã cần giữ
+    KEYWORDS_IGNORE: ['totreview.com', 'totreview'], // Domain bỏ qua
+
+    // Cài đặt kiểm tra
+    MAX_CHECKS: 15,        // Số lần kiểm tra mỗi chu kỳ
+    WAIT_SECONDS: 2,       // Giây chờ giữa các lần kiểm tra
+    CHECK_INTERVAL_MINUTES: 60  // Phút giữa các chu kỳ
 };
 // ===================================================
 
@@ -151,8 +158,6 @@ bot.command('run', async (ctx) => {
     const chatId = ctx.chat.id;
     await bot.telegram.sendMessage(chatId, '🔄 Đang kiểm tra... Vui lòng chờ!');
     console.log(`[+] User ${chatId} yêu cầu chạy thủ công`);
-    
-    // Chạy kiểm tra (bất đồng bộ để không block bot)
     runCheck().catch(err => console.error(err));
 });
 
@@ -181,7 +186,7 @@ bot.command('help', async (ctx) => {
         '/run - Chạy kiểm tra ngay\n' +
         '/status - Xem trạng thái\n' +
         '/help - Hỗ trợ\n\n' +
-        '🔧 Cấu hình:\n' +
+        '🔧 Cấu hình hiện tại:\n' +
         `- Link Uptolink: ${CONFIG.UPTO_LINK}\n` +
         `- Chu kỳ: ${CONFIG.CHECK_INTERVAL_MINUTES} phút`
     );
@@ -189,7 +194,6 @@ bot.command('help', async (ctx) => {
 });
 
 // =================== CRON JOB ===================
-// Chạy mỗi 30 phút (theo cấu hình)
 cron.schedule(`*/${CONFIG.CHECK_INTERVAL_MINUTES} * * * *`, async () => {
     console.log('[*] === Cron job chạy ===');
     await runCheck();
@@ -205,15 +209,12 @@ async function main() {
     console.log(`Chu kỳ: ${CONFIG.CHECK_INTERVAL_MINUTES} phút`);
     console.log('='.repeat(50));
 
-    // Khởi động bot
     await bot.launch();
     console.log('[+] Bot đã sẵn sàng!');
 
-    // Chạy kiểm tra lần đầu ngay khi khởi động
     console.log('[*] Chạy kiểm tra lần đầu...');
     await runCheck();
 
-    // Xử lý tắt bot
     process.once('SIGINT', () => {
         console.log('\n[*] Đang dừng bot...');
         bot.stop('SIGINT');
