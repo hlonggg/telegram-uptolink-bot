@@ -1,0 +1,19 @@
+{
+  "name": "telegram-uptolink-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot giám sát link Uptolink và thông báo mã mới",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": ["telegram", "bot", "uptolink", "monitor"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.2",
+    "telegraf": "^4.15.3"
+  }
+}
