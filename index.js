@@ -18,7 +18,7 @@ const CONFIG = {
 
     // Cài đặt kiểm tra
     MAX_CHECKS: 15,        // Số lần kiểm tra mỗi chu kỳ
-    WAIT_SECONDS: 2,       // Giây chờ giữa các lần kiểm tra
+    WAIT_SECONDS: 10,       // Giây chờ giữa các lần kiểm tra
     CHECK_INTERVAL_MINUTES: 60  // Phút giữa các chu kỳ
 };
 // ===================================================
