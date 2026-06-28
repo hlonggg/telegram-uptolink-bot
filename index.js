@@ -4,22 +4,23 @@ const cron = require('node-cron');
 
 // =================== CẤU HÌNH ===================
 // 🔧 SỬA CÁC GIÁ TRỊ BÊN DƯỚI THEO CỦA BẠN
+// HOẶC DÙNG BIẾN MÔI TRƯỜNG (khuyến nghị cho Railway)
 const CONFIG = {
     // Telegram Bot
-    BOT_TOKEN: '8801698234:AAGUersDEYljjVSxgMzSJeNjbEv0RI2fNWc',  // Token bot Telegram
-    CHAT_ID: '5550417994',                                  // Chat ID Telegram
+    BOT_TOKEN: process.env.BOT_TOKEN || '8801698234:AAGUersDEYljjVSxgMzSJeNjbEv0RI2fNWc',
+    CHAT_ID: process.env.CHAT_ID || '5550417994',
 
     // Uptolink
-    UPTO_LINK: 'https://uptolink.vip/Ce8sj', // Link Uptolink cần kiểm tra
+    UPTO_LINK: process.env.UPTO_LINK || 'https://uptolink.vip/Ce8sj',
 
     // Từ khóa
-    KEYWORDS_KEEP: ['linkhuongdan.online'],   // Domain chứa mã cần giữ
-    KEYWORDS_IGNORE: ['totreview.com', 'totreview'], // Domain bỏ qua
+    KEYWORDS_KEEP: ['linkhuongdan.online'],
+    KEYWORDS_IGNORE: ['totreview.com', 'totreview'],
 
     // Cài đặt kiểm tra
-    MAX_CHECKS: 20,        // Số lần kiểm tra mỗi chu kỳ
-    WAIT_SECONDS: 10,       // Giây chờ giữa các lần kiểm tra
-    CHECK_INTERVAL_MINUTES: 60  // Phút giữa các chu kỳ
+    MAX_CHECKS: 15,
+    WAIT_SECONDS: 2,
+    CHECK_INTERVAL_MINUTES: 30
 };
 // ===================================================
 
@@ -103,7 +104,6 @@ async function runCheck() {
     const foundCodes = new Set();
     let hasKeep = false;
     let hasIgnore = false;
-    let checkResults = [];
 
     for (let i = 0; i < CONFIG.MAX_CHECKS; i++) {
         console.log(`[*] Lần ${i + 1}/${CONFIG.MAX_CHECKS}`);
@@ -115,13 +115,9 @@ async function runCheck() {
             hasKeep = true;
             console.log(`[+] Phát hiện mã: ${result.code}`);
             foundCodes.add(result.code);
-            checkResults.push(`✅ Mã ${result.code}`);
         } else if (result.type === 'ignore') {
             hasIgnore = true;
             console.log('[*] Phát hiện totreview');
-            checkResults.push('❌ Totreview (hết mã)');
-        } else if (result.type === 'unknown') {
-            checkResults.push('❓ Domain lạ');
         }
 
         await new Promise(resolve => setTimeout(resolve, CONFIG.WAIT_SECONDS * 1000));
@@ -131,24 +127,19 @@ async function runCheck() {
     let message = '';
     
     if (foundCodes.size > 0) {
-        // CÓ MÃ → gửi danh sách mã
         message = formatMessage(foundCodes);
         console.log(`[+] Đã thông báo ${foundCodes.size} mã`);
     } else if (hasKeep && foundCodes.size === 0) {
-        // Có link hướng dẫn nhưng không lấy được mã
         message = '⚠️ Có link hướng dẫn nhưng không lấy được mã.\nVui lòng kiểm tra lại cấu hình hoặc link Uptolink.';
         console.log('[!] Lỗi parse mã');
     } else if (hasIgnore && foundCodes.size === 0) {
-        // Link đã hết mã (totreview)
         message = '❌ LINK ĐÃ HẾT MÃ.\nKhông còn mã nào để lấy.';
         console.log('🖕🏻 LINK ĐÃ HẾT MÃ');
     } else {
-        // Không tìm thấy gì
         message = 'ℹ️ Không tìm thấy mã nào trong lần kiểm tra này.\nCó thể link chưa có mã hoặc đã hết hạn.';
         console.log('[ ] Không tìm thấy mã nào');
     }
 
-    // Gửi tin nhắn tới user (bất kể có mã hay không)
     await sendTelegram(message);
     console.log('[*] Kết thúc kiểm tra');
 }
@@ -196,12 +187,28 @@ async function main() {
     console.log(`Chu kỳ: ${CONFIG.CHECK_INTERVAL_MINUTES} phút`);
     console.log('='.repeat(50));
 
-    await bot.launch();
-    console.log('[+] Bot đã sẵn sàng!');
+    // ✅ FIX LỖI 409: Xóa webhook cũ trước khi dùng polling
+    try {
+        await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+        console.log('[+] Đã xóa webhook cũ, giải phóng cho polling.');
+    } catch (error) {
+        console.log('[!] Không xóa được webhook:', error.message);
+        // Vẫn tiếp tục, có thể không có webhook cũ
+    }
+
+    // ✅ LAUNCH BOT VỚI POLLING
+    await bot.launch({
+        polling: {
+            timeout: 30,    // Thời gian chờ mỗi request
+            limit: 100,     // Số update tối đa mỗi request
+        }
+    });
+    console.log('[+] Bot đã sẵn sàng (polling)!');
 
     console.log('[*] Chạy kiểm tra lần đầu...');
     await runCheck();
 
+    // Xử lý tắt bot
     process.once('SIGINT', () => {
         console.log('\n[*] Đang dừng bot...');
         bot.stop('SIGINT');
