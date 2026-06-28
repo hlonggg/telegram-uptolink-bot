@@ -7,7 +7,7 @@ const cron = require('node-cron');
 const CONFIG = {
     // Telegram Bot
     BOT_TOKEN: '8801698234:AAGUersDEYljjVSxgMzSJeNjbEv0RI2fNWc',  // Token bot Telegram
-    CHAT_ID: '8801698234',                                  // Chat ID Telegram
+    CHAT_ID: '5550417994',                                  // Chat ID Telegram
 
     // Uptolink
     UPTO_LINK: 'https://uptolink.vip/Ce8sj', // Link Uptolink cần kiểm tra
@@ -18,8 +18,8 @@ const CONFIG = {
 
     // Cài đặt kiểm tra
     MAX_CHECKS: 15,        // Số lần kiểm tra mỗi chu kỳ
-    WAIT_SECONDS: 10,       // Giây chờ giữa các lần kiểm tra
-    CHECK_INTERVAL_MINUTES: 60  // Phút giữa các chu kỳ
+    WAIT_SECONDS: 2,       // Giây chờ giữa các lần kiểm tra
+    CHECK_INTERVAL_MINUTES: 30  // Phút giữa các chu kỳ
 };
 // ===================================================
 
@@ -103,6 +103,7 @@ async function runCheck() {
     const foundCodes = new Set();
     let hasKeep = false;
     let hasIgnore = false;
+    let checkResults = [];
 
     for (let i = 0; i < CONFIG.MAX_CHECKS; i++) {
         console.log(`[*] Lần ${i + 1}/${CONFIG.MAX_CHECKS}`);
@@ -114,27 +115,41 @@ async function runCheck() {
             hasKeep = true;
             console.log(`[+] Phát hiện mã: ${result.code}`);
             foundCodes.add(result.code);
+            checkResults.push(`✅ Mã ${result.code}`);
         } else if (result.type === 'ignore') {
             hasIgnore = true;
             console.log('[*] Phát hiện totreview');
+            checkResults.push('❌ Totreview (hết mã)');
+        } else if (result.type === 'unknown') {
+            checkResults.push('❓ Domain lạ');
         }
 
         await new Promise(resolve => setTimeout(resolve, CONFIG.WAIT_SECONDS * 1000));
     }
 
-    // Xử lý kết quả
+    // Xử lý kết quả và GỬI TIN NHẮN TRONG MỌI TRƯỜNG HỢP
+    let message = '';
+    
     if (foundCodes.size > 0) {
-        await sendTelegram(formatMessage(foundCodes));
+        // CÓ MÃ → gửi danh sách mã
+        message = formatMessage(foundCodes);
         console.log(`[+] Đã thông báo ${foundCodes.size} mã`);
     } else if (hasKeep && foundCodes.size === 0) {
-        console.log('[!] Có link hướng dẫn nhưng không lấy được mã');
+        // Có link hướng dẫn nhưng không lấy được mã
+        message = '⚠️ Có link hướng dẫn nhưng không lấy được mã.\nVui lòng kiểm tra lại cấu hình hoặc link Uptolink.';
+        console.log('[!] Lỗi parse mã');
     } else if (hasIgnore && foundCodes.size === 0) {
+        // Link đã hết mã (totreview)
+        message = '❌ LINK ĐÃ HẾT MÃ.\nKhông còn mã nào để lấy.';
         console.log('🖕🏻 LINK ĐÃ HẾT MÃ');
-        await sendTelegram('❌ LINK ĐÃ HẾT MÃ.');
     } else {
+        // Không tìm thấy gì
+        message = 'ℹ️ Không tìm thấy mã nào trong lần kiểm tra này.\nCó thể link chưa có mã hoặc đã hết hạn.';
         console.log('[ ] Không tìm thấy mã nào');
     }
 
+    // Gửi tin nhắn tới user (bất kể có mã hay không)
+    await sendTelegram(message);
     console.log('[*] Kết thúc kiểm tra');
 }
 
@@ -144,21 +159,12 @@ bot.command('start', async (ctx) => {
     await bot.telegram.sendMessage(
         chatId,
         '🤖 Chào mừng bạn đến với UptoLink Monitor Bot!\n\n' +
-        'Bot sẽ tự động kiểm tra link Uptolink và gửi thông báo khi phát hiện mã mới.\n\n' +
+        'Bot sẽ tự động kiểm tra link Uptolink mỗi 30 phút và gửi thông báo kết quả (có mã hoặc không có mã).\n\n' +
         '📌 Lệnh:\n' +
         '/start - Xem hướng dẫn\n' +
-        '/run - Chạy kiểm tra ngay lập tức\n' +
-        '/status - Xem trạng thái bot\n' +
-        '/help - Hỗ trợ'
+        '/status - Xem trạng thái bot'
     );
     console.log(`[+] User ${chatId} đã dùng /start`);
-});
-
-bot.command('run', async (ctx) => {
-    const chatId = ctx.chat.id;
-    await bot.telegram.sendMessage(chatId, '🔄 Đang kiểm tra... Vui lòng chờ!');
-    console.log(`[+] User ${chatId} yêu cầu chạy thủ công`);
-    runCheck().catch(err => console.error(err));
 });
 
 bot.command('status', async (ctx) => {
@@ -172,25 +178,6 @@ bot.command('status', async (ctx) => {
                    `📌 Số lần kiểm tra: ${CONFIG.MAX_CHECKS}`;
     await bot.telegram.sendMessage(chatId, status);
     console.log(`[+] User ${chatId} đã dùng /status`);
-});
-
-bot.command('help', async (ctx) => {
-    const chatId = ctx.chat.id;
-    await bot.telegram.sendMessage(
-        chatId,
-        '📖 HƯỚNG DẪN SỬ DỤNG\n\n' +
-        'Bot tự động kiểm tra link Uptolink mỗi 30 phút.\n' +
-        'Khi phát hiện mã mới, bot sẽ gửi thông báo.\n\n' +
-        '📌 Lệnh:\n' +
-        '/start - Xem hướng dẫn\n' +
-        '/run - Chạy kiểm tra ngay\n' +
-        '/status - Xem trạng thái\n' +
-        '/help - Hỗ trợ\n\n' +
-        '🔧 Cấu hình hiện tại:\n' +
-        `- Link Uptolink: ${CONFIG.UPTO_LINK}\n` +
-        `- Chu kỳ: ${CONFIG.CHECK_INTERVAL_MINUTES} phút`
-    );
-    console.log(`[+] User ${chatId} đã dùng /help`);
 });
 
 // =================== CRON JOB ===================
