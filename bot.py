@@ -88,7 +88,7 @@ def clear_log():
             "cleared": True
         }, f, indent=2)
     print(f"[+] Đã xóa sạch log mã lúc {datetime.now().strftime('%H:%M')}")
-    send_telegram_to_all(f"🔄 LOG MÃ ĐÃ ĐƯỢC XÓA ({datetime.now().strftime('%H:%M')})")
+    send_telegram_to_all(f"🔄 Ma Reset ({datetime.now().strftime('%H:%M')})")
 
 # ===================================================
 
@@ -256,7 +256,7 @@ def run_check():
         all_codes = known_codes.union(new_codes)
         save_log(all_codes)
     elif break_early and has_ignore and not found_codes:
-        message = f"⏹️ Dừng sớm: Gặp totreview {CONFIG['MAX_IGNORE_BREAK']} lần liên tiếp - LINK ĐÃ HẾT MÃ 🖕🏻"
+        message = f"⏹️ Gặp totreview {CONFIG['MAX_IGNORE_BREAK']} lần liên tiếp - LINK ĐÃ HẾT MÃ 🖕🏻"
         print("🖕🏻 LINK ĐÃ HẾT MÃ (dừng sớm)")
     elif has_ignore and not found_codes and ignore_count >= CONFIG["MAX_IGNORE_BREAK"]:
         message = "Dữ Liệu Trả Về Totreview - Hết Mã 🖕🏻"
