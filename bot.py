@@ -11,21 +11,22 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 import requests
 
-# =================== CẤU HÌNH ===================
-# Lấy từ biến môi trường (Render) hoặc dùng mặc định (Termux)
+# =================== CẤU HÌNH (TERMUX) ===================
 CONFIG = {
-    "BOT_TOKEN": os.getenv("BOT_TOKEN", "8801698234:AAGv2fEwBt7LDmTOBJugJLWHHnNQFizbw_0"),
-    "ADMIN_ID": os.getenv("ADMIN_ID", "5550417994"),
-    "UPTO_LINK": os.getenv("UPTO_LINK", "https://uptolink.vip/Ce8sj"),
+    # 🔥 THAY GIÁ TRỊ CỦA BẠN VÀO ĐÂY
+    "BOT_TOKEN": "8801698234:AAGv2fEwBt7LDmTOBJugJLWHHnNQFizbw_0",
+    "ADMIN_ID": "5550417994",
+    "UPTO_LINK": "https://uptolink.vip/Ce8sj",
     "KEYWORDS_KEEP": ["linkhuongdan.online"],
     "KEYWORDS_IGNORE": ["totreview.com", "totreview"],
-    "MAX_CHECKS": 10,
-    "WAIT_SECONDS": 1,
-    "CHECK_INTERVAL_MINUTES": 5,
+    "MAX_CHECKS": 6,
+    "MAX_IGNORE_BREAK": 5,
+    "WAIT_SECONDS": 4,
+    "CHECK_INTERVAL_MINUTES": 2,
     "LOG_FILE": "found_codes.json",
     "USERS_FILE": "users.json"
 }
-# ===================================================
+# ==========================================================
 
 # =================== PHÁT HIỆN MÔI TRƯỜNG ===================
 if platform.system() == "Linux" and os.path.exists("/usr/bin/chromium"):
@@ -206,39 +207,47 @@ def run_check():
     has_keep = False
     has_ignore = False
     ignore_count = 0
-    log_messages = []
+    break_early = False
     
     for i in range(CONFIG["MAX_CHECKS"]):
         if not running:
             break
+        
+        if ignore_count >= CONFIG["MAX_IGNORE_BREAK"]:
+            print(f"[!] Đã gặp totreview {ignore_count} lần liên tiếp, dừng kiểm tra sớm.")
+            break_early = True
+            break
+        
+        print(f"[*] Lần {i+1}/{CONFIG['MAX_CHECKS']}")
         result = check_upto_link()
         
         if result is None:
-            log_messages.append(f"❌ Lỗi kết nối (lần {i+1})")
             continue
             
         if result.get("type") == "keep":
             has_keep = True
+            ignore_count = 0
             code = result.get('code')
             if code:
                 if code in known_codes:
-                    log_messages.append(f"⏭️ Mã {code} (đã có)")
+                    print(f"[ ] Mã đã có trong log (bỏ qua): {code}")
                 else:
                     print(f"[+] Mã mới: {code}")
                     found_codes.add(code)
                     new_codes.add(code)
-                    log_messages.append(f"✅ Mã mới {code}")
             else:
-                log_messages.append("⚠️ Link hướng dẫn nhưng không có mã")
+                print("[!] Link hướng dẫn nhưng không có mã")
         elif result.get("type") == "ignore":
             has_ignore = True
             ignore_count += 1
-            log_messages.append(f"❌ Totreview (lần {ignore_count})")
+            print(f"[*] Phát hiện totreview (lần {ignore_count}/{CONFIG['MAX_IGNORE_BREAK']})")
         else:
-            log_messages.append(f"❓ Không xác định (lần {i+1})")
+            ignore_count = 0
+            print(f"[?] Domain lạ")
         
         time.sleep(CONFIG["WAIT_SECONDS"])
     
+    # Xử lý kết quả - CHỈ GỬI TIN NHẮN THÔNG BÁO QUAN TRỌNG
     message = ""
     
     if new_codes:
@@ -246,21 +255,23 @@ def run_check():
         print(f"[+] Đã thông báo {len(new_codes)} mã mới")
         all_codes = known_codes.union(new_codes)
         save_log(all_codes)
-    elif has_ignore and not found_codes and ignore_count >= CONFIG["MAX_CHECKS"]:
+    elif break_early and has_ignore and not found_codes:
+        message = f"⏹️ Dừng sớm: Gặp totreview {CONFIG['MAX_IGNORE_BREAK']} lần liên tiếp - LINK ĐÃ HẾT MÃ 🖕🏻"
+        print("🖕🏻 LINK ĐÃ HẾT MÃ (dừng sớm)")
+    elif has_ignore and not found_codes and ignore_count >= CONFIG["MAX_IGNORE_BREAK"]:
         message = "Dữ Liệu Trả Về Totreview - Hết Mã 🖕🏻"
         print("🖕🏻 LINK ĐÃ HẾT MÃ (totreview)")
     elif has_keep and not found_codes:
-        message = "⚠️ Có link hướng dẫn nhưng không lấy được mã."
+        message = "⚠️ Không Có Mã Mới Nào"
         print("[!] Lỗi parse mã")
     else:
-        message = "ℹ️ Không tìm thấy mã mới trong lần kiểm tra này."
-        print("[ ] Không tìm thấy mã mới")
+        # ✅ KHÔNG GỬI TIN NHẮN "Không tìm thấy mã mới" NỮA
+        print("[ ] Không tìm thấy mã mới trong lần kiểm tra này.")
+        return  # Thoát sớm, không gửi tin nhắn
     
-    send_telegram_to_all(message)
-    
-    if log_messages:
-        log_text = "📋 LOG KIỂM TRA:\n" + "\n".join(log_messages[-5:])
-        send_telegram_to_all(log_text)
+    # Chỉ gửi tin nhắn khi có kết quả quan trọng
+    if message:
+        send_telegram_to_all(message)
 
 # =================== VÒNG LẶP CHÍNH ===================
 def main_loop():
@@ -277,7 +288,9 @@ def main_loop():
                 last_clear_hour = current_hour
                 print(f"\n[*] === XÓA LOG LÚC {current_hour}:55 ===")
                 clear_log()
-                print(f"[*] === ĐÃ XÓA LOG ===\n")
+                # 🔥 RESET để kiểm tra ngay
+                last_check_time = time.time() - CONFIG["CHECK_INTERVAL_MINUTES"] * 60
+                print(f"[*] === ĐÃ XÓA LOG, KIỂM TRA NGAY ===\n")
             
             # Kiểm tra mỗi 5 phút
             current_time = time.time()
@@ -294,7 +307,7 @@ def main_loop():
             else:
                 mins_to_next_hour = 60 - current_minute
                 next_hour = (current_hour + 1) % 24
-                print(f"\r[*] Đã xóa log {current_hour}:55 | Còn {mins_to_next_hour} phút đến giờ {next_hour}:00", end="")
+                print(f"\r[*] Đã xóa log {current_hour}:55 | Còn {mins_to_next_hour} phút đến giờ {next_hour}:00 | Kiểm tra mỗi {CONFIG['CHECK_INTERVAL_MINUTES']} phút", end="")
             
             time.sleep(30)
             
@@ -326,7 +339,6 @@ def handle_telegram_updates():
                     user_id = str(from_user.get("id", ""))
                     text = message.get("text", "")
                     
-                    # LỆNH /RUNBOT (CHỈ ADMIN)
                     if text == "/runbot" and user_id == CONFIG["ADMIN_ID"]:
                         if running:
                             send_telegram(chat_id, "⚠️ Bot đã đang chạy!")
@@ -341,7 +353,6 @@ def handle_telegram_updates():
                                 bot_thread = threading.Thread(target=main_loop, daemon=True)
                                 bot_thread.start()
                     
-                    # LỆNH /STOPBOT (CHỈ ADMIN)
                     elif text == "/stopbot" and user_id == CONFIG["ADMIN_ID"]:
                         if running:
                             running = False
@@ -350,7 +361,6 @@ def handle_telegram_updates():
                         else:
                             send_telegram(chat_id, "⚠️ Bot đã tắt rồi!")
                     
-                    # LỆNH /START
                     elif text == "/start":
                         users = load_users()
                         users.add(str(chat_id))
@@ -362,6 +372,7 @@ def handle_telegram_updates():
                         
                         welcome_msg = f"🤖 Chào mừng bạn đến với UptoLink Monitor Bot{group_notice}!\n\n" + \
                                      f"🔄 Bot kiểm tra mỗi {CONFIG['CHECK_INTERVAL_MINUTES']} phút.\n" + \
+                                     f"⏹️ Dừng kiểm tra sau {CONFIG['MAX_IGNORE_BREAK']} lần totreview liên tiếp.\n" + \
                                      "📋 Log mã được xóa vào phút 55 mỗi giờ.\n\n" + \
                                      f"👥 Hiện có {len(users)} user đã đăng ký.\n\n" + \
                                      "🔐 Lệnh Admin:\n" + \
@@ -369,7 +380,6 @@ def handle_telegram_updates():
                                      "/stopbot - Tắt bot"
                         send_telegram(chat_id, welcome_msg)
                     
-                    # LỆNH /STATUS
                     elif text == "/status":
                         users = load_users()
                         known_codes = load_log()
@@ -379,6 +389,7 @@ def handle_telegram_updates():
                                  f"📋 Mã đã lưu: {len(known_codes)}\n" + \
                                  f"🔗 Link: {CONFIG['UPTO_LINK']}\n" + \
                                  f"⏱ Kiểm tra: Mỗi {CONFIG['CHECK_INTERVAL_MINUTES']} phút\n" + \
+                                 f"⏹️ Dừng kiểm tra sau {CONFIG['MAX_IGNORE_BREAK']} lần totreview\n" + \
                                  f"🔄 Xóa log: Phút 55 mỗi giờ"
                         send_telegram(chat_id, status)
         
@@ -397,24 +408,22 @@ def main():
     users = load_users()
     known_codes = load_log()
     
-    # In thông tin khởi động
     print("=" * 50)
-    print("TELEGRAM UPTOLINK MONITOR BOT")
+    print("TELEGRAM UPTOLINK MONITOR BOT (TERMUX)")
     print(f"Link: {CONFIG['UPTO_LINK']}")
     print(f"Admin ID: {CONFIG['ADMIN_ID']}")
     print(f"Kiểm tra mỗi: {CONFIG['CHECK_INTERVAL_MINUTES']} phút")
+    print(f"Dừng kiểm tra sau: {CONFIG['MAX_IGNORE_BREAK']} lần totreview")
     print(f"Xóa log: Phút 55 mỗi giờ")
     print(f"Bot đang: {'CHẠY' if running else 'TẮT'}")
     print(f"Số user: {len(users)}")
     print(f"Mã đã lưu: {len(known_codes)}")
     print("=" * 50)
     
-    # Thread Telegram
     telegram_thread = threading.Thread(target=handle_telegram_updates, daemon=True)
     telegram_thread.start()
     print("[+] Thread Telegram đã chạy")
     
-    # Nếu bot đã bật từ trước, chạy main_loop
     global bot_thread
     if running:
         bot_thread = threading.Thread(target=main_loop, daemon=True)
@@ -422,7 +431,6 @@ def main():
     else:
         print("[*] Bot đang tắt. Chờ admin gửi /runbot để khởi động.")
     
-    # Giữ main chạy
     while True:
         try:
             time.sleep(10)
